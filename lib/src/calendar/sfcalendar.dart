@@ -219,6 +219,8 @@ class SfCalendar extends StatefulWidget {
     this.onDragStart,
     this.onDragUpdate,
     this.onDragEnd,
+    this.onScaleCalendarDay,
+    this.onDaySelectionChanged,
   })  : assert(firstDayOfWeek >= 1 && firstDayOfWeek <= 7),
         assert(headerHeight >= 0),
         assert(viewHeaderHeight >= -1),
@@ -1805,6 +1807,10 @@ class SfCalendar extends StatefulWidget {
   ///
   /// ```
   final CalendarSelectionChangedCallback? onSelectionChanged;
+
+  final Function(CalendarDaySelectionDetails)? onDaySelectionChanged;
+
+  final Function(double scale)? onScaleCalendarDay;
 
   /// Used to set the [Appointment] or custom event collection through the
   /// [CalendarDataSource] class.
@@ -9231,32 +9237,39 @@ class _SfCalendarState extends State<SfCalendar>
                           left: isRTL ? 0 : _agendaDateViewWidth,
                           right: isRTL ? _agendaDateViewWidth : 0,
                           bottom: 0,
-                          child: ListView(
-                            padding: EdgeInsets.zero,
+                          child: Scrollbar(
                             controller: _agendaScrollController,
-                            children: <Widget>[
-                              AgendaViewLayout(
-                                  widget.monthViewSettings,
-                                  null,
-                                  currentSelectedDate,
-                                  agendaAppointments,
-                                  isRTL,
-                                  _locale,
-                                  _localizations,
-                                  _calendarTheme,
-                                  _themeData,
-                                  _agendaViewNotifier,
-                                  widget.appointmentTimeTextFormat,
-                                  _agendaDateViewWidth,
-                                  _textScaleFactor,
-                                  _isMobilePlatform,
-                                  widget.appointmentBuilder,
-                                  width - _agendaDateViewWidth,
-                                  painterHeight,
-                                  widget.monthViewSettings.agendaStyle
-                                      .placeholderTextStyle,
-                                  widget),
-                            ],
+                            thumbVisibility: true,
+                            child: Padding(
+                              padding: const EdgeInsets.only(right: 15),
+                              child: ListView(
+                                padding: EdgeInsets.zero,
+                                controller: _agendaScrollController,
+                                children: <Widget>[
+                                  AgendaViewLayout(
+                                      widget.monthViewSettings,
+                                      null,
+                                      currentSelectedDate,
+                                      agendaAppointments,
+                                      isRTL,
+                                      _locale,
+                                      _localizations,
+                                      _calendarTheme,
+                                      _themeData,
+                                      _agendaViewNotifier,
+                                      widget.appointmentTimeTextFormat,
+                                      _agendaDateViewWidth,
+                                      _textScaleFactor,
+                                      _isMobilePlatform,
+                                      widget.appointmentBuilder,
+                                      width - _agendaDateViewWidth,
+                                      painterHeight,
+                                      widget.monthViewSettings.agendaStyle
+                                          .placeholderTextStyle,
+                                      widget),
+                                ],
+                              ),
+                            ),
                           ),
                         ),
                       ]),
@@ -11339,16 +11352,10 @@ class _AgendaDateTimePainter extends CustomPainter {
       TextStyle dateTextStyle,
       bool isToday,
       bool isMobile) {
-    //// Draw Weekday
-    final String dayTextFormat = scheduleViewSettings != null
-        ? scheduleViewSettings!.dayHeaderSettings.dayFormat
-        : 'EEE';
-    TextSpan span = TextSpan(
-        text: DateFormat(dayTextFormat, locale)
-            .format(selectedDate!)
-            .toUpperCase(),
+    TextSpan monthSpan = TextSpan(
+        text: DateFormat('M月', locale).format(selectedDate!).toUpperCase(),
         style: dayTextStyle);
-    _updateTextPainter(span);
+    _updateTextPainter(monthSpan);
 
     _textPainter.layout(maxWidth: size.width);
     _textPainter.paint(
@@ -11359,7 +11366,8 @@ class _AgendaDateTimePainter extends CustomPainter {
 
     final double weekDayHeight = padding + _textPainter.height;
     //// Draw Date
-    span = TextSpan(text: selectedDate!.day.toString(), style: dateTextStyle);
+    TextSpan span =
+        TextSpan(text: selectedDate!.day.toString(), style: dateTextStyle);
     _updateTextPainter(span);
 
     _textPainter.layout(maxWidth: size.width);
@@ -11368,11 +11376,11 @@ class _AgendaDateTimePainter extends CustomPainter {
     const int inBetweenPadding = 2;
     final double xPosition =
         padding + ((size.width - (2 * padding) - _textPainter.width) / 2);
-    double yPosition = weekDayHeight;
+    double yPosition = weekDayHeight + padding + inBetweenPadding;
+
     if (isToday) {
-      yPosition = weekDayHeight + padding + inBetweenPadding;
       _linePainter.color = todayHighlightColor!;
-      _drawTodayCircle(canvas, xPosition, yPosition, padding);
+      _drawTodayCircle(canvas, xPosition, yPosition, 0);
     }
 
     /// padding added between date and day labels in web, to avoid the
@@ -11394,11 +11402,28 @@ class _AgendaDateTimePainter extends CustomPainter {
                     ? Colors.white
                     : Colors.black87)
                 .withOpacity(0.04);
-        _drawTodayCircle(canvas, xPosition, yPosition, padding);
+        _drawTodayCircle(canvas, xPosition, yPosition, 0);
       }
     }
 
     _textPainter.paint(canvas, Offset(xPosition, yPosition));
+    //// Draw Weekday
+    final String dayTextFormat = scheduleViewSettings != null
+        ? scheduleViewSettings!.dayHeaderSettings.dayFormat
+        : '(EEE)';
+    span = TextSpan(
+        text: DateFormat(dayTextFormat, locale)
+            .format(selectedDate!)
+            .toUpperCase(),
+        style: dayTextStyle);
+    _updateTextPainter(span);
+
+    _textPainter.layout(maxWidth: size.width);
+    _textPainter.paint(
+        canvas,
+        Offset(
+            padding + ((size.width - (2 * padding) - _textPainter.width) / 2),
+            size.height - _textPainter.height));
   }
 
   void _addDayLabelForWeb(Canvas canvas, Size size, double padding,
